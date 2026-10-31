@@ -9,30 +9,25 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState({ topics_mastered: 0, total_time: 0, avg_score: 0 });
   const [knowledgeMap, setKnowledgeMap] = useState({});
+  const [profile, setProfile] = useState(null);
+  const [loadError, setLoadError] = useState('');
   const [selectedTopic, setSelectedTopic] = useState('');
   const [history, setHistory] = useState([]);
   const [showLimit, setShowLimit] = useState(5);
 
   useEffect(() => {
-    profileService.getStats().then(res => setStats(res.data));
+    profileService.getStats().then(res => setStats(res.data)).catch(err => setLoadError(err.response?.data?.detail || 'Unable to load dashboard stats'));
+    profileService.getProfile().then(res => setProfile(res.data)).catch(err => setLoadError(err.response?.data?.detail || 'Unable to load learning profile'));
     profileService.getKnowledgeMap().then(res => {
       setKnowledgeMap(res.data);
       const topics = Object.keys(res.data);
       if (topics.length > 0) {
         setSelectedTopic(topics[0]);
       }
-    });
+    }).catch(err => setLoadError(err.response?.data?.detail || 'Unable to load knowledge map'));
     quizService.getHistory().then(res => {
-      // Deduplicate history items that are identical and submitted within 10 seconds of each other
-      const cleanHistory = res.data.filter((item, index, self) =>
-        index === self.findIndex((t) => (
-          t.topic === item.topic &&
-          t.score === item.score &&
-          Math.abs(new Date(t.created_at) - new Date(item.created_at)) < 10000
-        ))
-      );
-      setHistory(cleanHistory);
-    });
+      setHistory(res.data);
+    }).catch(err => setLoadError(err.response?.data?.detail || 'Unable to load quiz history'));
   }, []);
 
   const topics = Object.keys(knowledgeMap);
@@ -59,6 +54,13 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {loadError && <div role="alert" className="mb-6 p-4 bg-rose-50 text-rose-800 rounded-xl">{loadError}</div>}
+      {profile && <div className="mb-8 p-5 bg-white rounded-2xl border border-slate-200 text-sm text-slate-700">
+        <strong>Learning profile</strong> · Level: {profile.proficiency_level || 'Beginner'} · Average time/question: {profile.learning_speed == null ? 'Not yet measured' : `${profile.learning_speed}s`}
+        <div className="mt-2">Strengths: {profile.strengths?.join(', ') || 'Complete a quiz to discover'}</div>
+        <div>Areas to practice: {profile.weaknesses?.join(', ') || 'None identified yet'}</div>
+        <div>Recent quiz scores: {profile.accuracy_trend?.map(item => `${item.score}%`).join(' → ') || 'No quiz attempts yet'}</div>
+      </div>}
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
         <StatCard icon={<TrendingUp className="text-emerald-600" />} label="Avg Accuracy" value={`${stats.avg_score}%`} color="bg-emerald-50" />

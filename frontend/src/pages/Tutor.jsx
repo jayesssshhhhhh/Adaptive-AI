@@ -55,7 +55,7 @@ export default function Tutor() {
       const aiResponse = { role: 'ai', content: res.data.response };
       setHistory(prev => [...prev, aiResponse]);
     } catch (err) {
-      setHistory(prev => [...prev, { role: 'ai', content: "I'm having a bit of trouble connecting to my knowledge base. Let's try that again!" }]);
+      setHistory(prev => [...prev, { role: 'ai', content: err.response?.data?.detail || 'Tutor request failed; check your API configuration and backend terminal.' }]);
     } finally {
       setIsLoading(false);
     }

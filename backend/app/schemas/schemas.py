@@ -24,6 +24,13 @@ class ProfileUpdate(BaseModel):
     proficiency_level: Optional[str] = None
     interests: Optional[List[str]] = None
 
+class ProfileDetails(ProfileUpdate):
+    model_config = {"from_attributes": True}
+    strengths: Optional[List[str]] = None
+    weaknesses: Optional[List[str]] = None
+    learning_speed: Optional[float] = None  # seconds per question
+    accuracy_trend: Optional[List[dict]] = None
+
 class QuizStartRequest(BaseModel):
     topic: Optional[str] = None
     file_id: Optional[str] = None
@@ -37,13 +44,14 @@ class Question(BaseModel):
     concept_tag: str
 
 class QuizResult(BaseModel):
+    id: Optional[int] = None
     score: float
     total_questions: int
     time_taken: int
     concept_performance: Any
     behavioral_insights: Any
     questions: List[Question]
-    answers: List[str]
+    answers: List[Optional[str]]
     topic: Optional[str] = None
     attempt_summary: Optional[str] = None
     attempt_strengths: Optional[List[str]] = None

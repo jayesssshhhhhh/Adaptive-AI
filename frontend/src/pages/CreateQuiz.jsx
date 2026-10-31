@@ -15,16 +15,8 @@ export default function CreateQuiz() {
 
   useEffect(() => {
     quizService.getHistory().then(res => {
-      // Deduplicate history items that are identical and submitted within 10 seconds of each other
-      const cleanHistory = res.data.filter((item, index, self) =>
-        index === self.findIndex((t) => (
-          t.topic === item.topic &&
-          t.score === item.score &&
-          Math.abs(new Date(t.created_at) - new Date(item.created_at)) < 10000
-        ))
-      );
-      setHistory(cleanHistory);
-    });
+      setHistory(res.data);
+    }).catch(err => console.error('Could not load quiz history', err));
   }, []);
 
   const startQuiz = async () => {

@@ -41,7 +41,7 @@ export default function Quiz() {
       setStartTime(Date.now());
       questionStartTime.current = Date.now();
     } catch (err) {
-      alert('Failed to generate quiz');
+      alert(err.response?.data?.detail || err.message || 'Failed to generate quiz');
       navigate('/');
     }
   };
@@ -102,9 +102,9 @@ export default function Quiz() {
 
     try {
       const res = await quizService.submit(payload);
-      navigate('/review', { state: { questions, answers: answersArray, results: { ...payload, id: res.data.id } } });
+      navigate('/review', { state: { questions, answers: answersArray, results: res.data } });
     } catch (err) {
-      alert('Submission failed');
+      alert(err.response?.data?.detail || 'Submission failed');
       setSubmitting(false);
     }
   };

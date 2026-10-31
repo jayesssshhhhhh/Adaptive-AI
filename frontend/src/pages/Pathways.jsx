@@ -261,8 +261,8 @@ export default function Pathways() {
       const res = await profileService.generateStudyMaterial(payload);
       setContent(res.data.content);
       loadHistory(0, true);
-    } catch {
-      setError('The AI Generator is currently unavailable. Please try again later.');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'AI study guide generation failed. Check backend terminal.');
     } finally {
       setIsLoading(false);
     }
