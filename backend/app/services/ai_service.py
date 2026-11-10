@@ -5,6 +5,7 @@ Errors are raised, not converted into fake success messages or empty quizzes.
 import asyncio
 import json
 import logging
+import httpx
 from typing import List
 from google import genai
 from google.genai import types
@@ -20,8 +21,7 @@ class AIServiceError(Exception):
 
 # Defer client construction if the API key has not been configured yet.
 client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
-
-async def _generate(contents, *, json_mode=False):
+async def _generate_gemini(contents, *, json_mode=False):
     # GEMINI_RETRY_503_PATCH_V1: retry only temporary model overload, not bad keys or quota errors.
     if client is None:
         raise AIServiceError("GEMINI_API_KEY is missing. Set it in backend/.env, then restart FastAPI.")
@@ -121,3 +121,94 @@ async def generate_explore_material(topic: str, duration: int, proficiency: str 
 Include: title, intuitive introduction, foundations, practical examples, common mistakes, takeaways and two practice questions.
 Use readable headings and adapt to the learner's level."""
     return await _generate(prompt)
+async def _generate(contents, *, json_mode=False):
+    provider = settings.AI_PROVIDER.strip().lower()
+
+    if provider == "gemini":
+        return await _generate_gemini(contents, json_mode=json_mode)
+
+    if provider != "ollama":
+        raise AIServiceError("AI_PROVIDER must be gemini or ollama.")
+
+    if isinstance(contents, str):
+        messages = [{"role": "user", "content": contents}]
+    else:
+        messages = [
+            {
+                "role": "assistant" if item["role"] == "model" else "user",
+                "content": "\n".join(
+                    part["text"] for part in item.get("parts", [])
+                    if isinstance(part.get("text"), str)
+                ),
+            }
+            for item in contents
+        ]
+
+    payload = {
+        "model": settings.OLLAMA_MODEL,
+        "messages": messages,
+        "stream": False,
+        "options": {"temperature": 0.3},
+    }
+
+    # The existing quiz function expects a JSON array.
+    if json_mode:
+        payload["format"] = {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "question_text": {"type": "string"},
+                    "options": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "minItems": 4,
+                        "maxItems": 4,
+                    },
+                    "correct_answer": {"type": "string"},
+                    "concept_tag": {"type": "string"},
+                },
+                "required": [
+                    "question_text",
+                    "options",
+                    "correct_answer",
+                    "concept_tag",
+                ],
+                "additionalProperties": False,
+            },
+        }
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=settings.OLLAMA_TIMEOUT_SECONDS
+        ) as session:
+            response = await session.post(
+                f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/chat",
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+    except httpx.TimeoutException as exc:
+        raise AIServiceError(
+            "Ollama timed out. Try a shorter request."
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        raise AIServiceError(
+            f"Ollama returned HTTP {exc.response.status_code}. "
+            "Check that the configured model is installed."
+        ) from exc
+    except httpx.RequestError as exc:
+        raise AIServiceError(
+            "Cannot reach Ollama. Open the Ollama app and retry."
+        ) from exc
+    except ValueError as exc:
+        raise AIServiceError("Ollama returned invalid JSON.") from exc
+
+    message = data.get("message") if isinstance(data, dict) else None
+    text = message.get("content") if isinstance(message, dict) else None
+
+    if not isinstance(text, str) or not text.strip():
+        raise AIServiceError("Ollama returned an empty or invalid response.")
+
+    return text.strip()
